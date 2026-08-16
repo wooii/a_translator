@@ -52,6 +52,11 @@
       margin: 4px 0 0 0;
     }
     #status { color: #4a4; font-size: 12px; min-height: 16px; }
+    .fallback-note {
+      font-size: 12px;
+      color: #555;
+      margin: 0 0 12px 0;
+    }
   </style>
 </head>
 <body>
@@ -65,15 +70,16 @@
         <input type="radio" name="provider" value="browser">
         Browser AI (on-device, private, faster)
       </label>
-      <div class="privacy-local provider-desc">✓ Your selected text never leaves the browser. Translations are produced on-device, instantly and offline. Requires Edge 148+ / Chrome 138+.</div>
+      <div class="privacy-local provider-desc">✓ Your selected text never leaves the browser — translated on-device, instantly and offline. Requires latest browser versions. The translation model is downloaded automatically the first time you use a language pair (managed by the browser, shared across all sites).</div>
     </div>
     <div class="provider-option" id="provider-google">
       <label class="provider-choice">
         <input type="radio" name="provider" value="google">
         Google Translate (online)
       </label>
-      <div class="privacy-online provider-desc">⚠ Your selected text leaves this device and is sent to Google's servers. Used automatically when Browser AI can't be used (older browser, unsupported language, model not downloaded).</div>
+      <div class="privacy-online provider-desc">⚠ Your selected text leaves this device and is sent to Google's servers for translation.</div>
     </div>
+    <p class="fallback-note">Google Translate is used automatically whenever Browser AI can't be used (older browser, unsupported language, model not downloaded). Online results show "⚠ Translated by Google." in the popup — one click switches back to on-device AI.</p>
 
     <label for="targetLanguage">Target language:</label>
     <select id="targetLanguage">

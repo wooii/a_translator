@@ -100,8 +100,8 @@
     if (popup) popup.remove();
     popup = document.createElement('div');
     popup.id = 'translation-popup';
-    popup.innerHTML = '<div class="popup-content"><span id="selected-text">' + esc(text) +
-                      '</span><p id="translation-text">Loading<span id="loading-dots">…</span></p></div>';
+    popup.innerHTML = '<div id="popup-scroll"><div class="popup-content"><span id="selected-text">' + esc(text) +
+                      '</span><p id="translation-text">Loading<span id="loading-dots">…</span></p></div></div>';
     document.body.appendChild(popup);
     addPopupEventListeners();
     adjustPopupSize();
@@ -112,9 +112,9 @@
     var sel = window.getSelection();
     if (sel.rangeCount > 0) {
       var r = sel.getRangeAt(0).getBoundingClientRect();
-      return { left: r.left, top: r.bottom, width: r.width };
+      return { left: r.left, top: r.top, bottom: r.bottom, width: r.width };
     }
-    return { left: 0, top: 0, width: 0 };
+    return { left: 0, top: 0, bottom: 0, width: 0 };
   }
 
   function addSearchIcon() {
@@ -129,14 +129,21 @@
     var el = document.createElement('div');
     el.id = 'search-icon';
     el.textContent = '🔍';
+    var iconSize = 36;
+    var iconLeft = rect.left + 5;
+    if (iconLeft + iconSize > window.innerWidth) iconLeft = window.innerWidth - iconSize - 5;
+    if (iconLeft < 0) iconLeft = 0;
+    var iconTop = rect.bottom - 2;
+    if (iconTop + iconSize > window.innerHeight) iconTop = window.innerHeight - iconSize - 5;
+    if (iconTop < 0) iconTop = 0;
     Object.assign(el.style, {
       position: 'fixed', backgroundColor: '#FFF', border: '1px solid #ccc',
       borderRadius: '50%', padding: '5px', boxShadow: '0 0 5px rgba(0,0,0,0.3)',
       cursor: 'pointer', zIndex: '2147483646',
-      width: '36px', height: '36px',
+      width: iconSize + 'px', height: iconSize + 'px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: '18px', lineHeight: '1',
-      left: (rect.left + 5) + 'px', top: (rect.bottom - 2) + 'px'
+      left: Math.round(iconLeft) + 'px', top: Math.round(iconTop) + 'px'
     });
     document.body.appendChild(el);
 
@@ -237,7 +244,7 @@
     if (popup) popup.remove();
     popup = document.createElement('div');
     popup.id = 'translation-popup';
-    var content = '<div class="popup-content">';
+    var content = '<div id="popup-scroll"><div class="popup-content">';
     content += '<span id="selected-text">' + esc(text) + '</span>';
     if (!error) {
       content += '<button id="pronounce-button">🔊</button>';
@@ -247,12 +254,14 @@
     }
     if (!error && moreUrl) {
       var clickable = browserCapable();
-      content += '<p class="online-notice' + (clickable ? ' clickable' : '') + '">⬆ Translated online by Google — your text left this device.' + (clickable ? ' Click to switch to on-device (Browser AI).' : '') + '</p>';
+      content += '<p class="online-notice' + (clickable ? ' clickable' : '') + '">⚠ Translated by Google.' + (clickable ? ' Click to switch to on-device AI.' : '') + '</p>';
       content += '<a href="' + moreUrl + '" target="_blank">More</a>';
     }
-    content += '</div>';
+    content += '</div></div>';
     popup.innerHTML = content;
     document.body.appendChild(popup);
+    addPopupEventListeners();
+    adjustPopupSize();
     if (!error && moreUrl && browserCapable()) {
       var notice = popup.querySelector('.online-notice');
       if (notice) {
@@ -265,20 +274,20 @@
         });
       }
     }
-    getVoices();
-    addPopupEventListeners();
+    try { getVoices(); } catch (e) {}
     if (!error) {
-      wireSpeakButton('#pronounce-button', 'original', text, function() {
-        return detectSourceLang(text);
-      });
-      wireSpeakButton('#pronounce-translation-button', 'translation', translation, function() {
-        return chrome.storage.sync.get('targetLanguage').then(function(data) {
-          var tgt = data.targetLanguage || 'en';
-          return BROWSER_LANG_MAP[tgt] || tgt;
+      try {
+        wireSpeakButton('#pronounce-button', 'original', text, function() {
+          return detectSourceLang(text);
         });
-      });
+        wireSpeakButton('#pronounce-translation-button', 'translation', translation, function() {
+          return chrome.storage.sync.get('targetLanguage').then(function(data) {
+            var tgt = data.targetLanguage || 'en';
+            return BROWSER_LANG_MAP[tgt] || tgt;
+          });
+        });
+      } catch (e) {}
     }
-    adjustPopupSize();
   }
 
   function esc(s) {
@@ -287,15 +296,20 @@
   }
 
   function getVoices() {
-    voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      window.speechSynthesis.onvoiceschanged = function() { voices = window.speechSynthesis.getVoices(); };
-    }
+    if (typeof window.speechSynthesis === 'undefined') return;
+    try {
+      voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        window.speechSynthesis.onvoiceschanged = function() { voices = window.speechSynthesis.getVoices(); };
+      }
+    } catch (e) {}
   }
 
   function closePopup() {
     stopLoadingAnimation();
-    window.speechSynthesis.cancel();
+    if (typeof window.speechSynthesis !== 'undefined') {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
     currentUtterance = null;
     currentSpeechBtn = null;
     if (popup) { popup.remove(); popup = null; }
@@ -324,6 +338,8 @@
   }
 
   function speakText(text, lang, btnId) {
+    if (typeof window.speechSynthesis === 'undefined') return;
+    try {
     window.speechSynthesis.cancel();
     currentUtterance = null;
     var u = new SpeechSynthesisUtterance(text);
@@ -339,6 +355,7 @@
     currentUtterance = u;
     currentSpeechBtn = btnId;
     speechSynthesis.speak(u);
+    } catch (e) {}
   }
 
   function wireSpeakButton(selector, btnId, text, getLang) {
@@ -358,36 +375,46 @@
   function adjustPopupSize() {
     if (!popup) return;
     var rect = getSelectionRect();
+    var maxH = Math.round(window.innerHeight * 0.8);
     popup.style.minWidth = Math.max(rect.width, 200) + 'px';
     popup.style.maxWidth = '400px';
-    setPopupPosition();
+    popup.style.maxHeight = maxH + 'px';
+    popup.style.overflowY = 'auto';
+    popup.style.boxSizing = 'border-box';
+    var scroller = popup.querySelector('#popup-scroll');
+    if (scroller) {
+      scroller.style.overflowY = 'auto';
+      scroller.style.maxHeight = maxH + 'px';
+      scroller.style.boxSizing = 'border-box';
+    }
+    var s = scroller || popup;
+    if (s.scrollHeight > s.clientHeight) {
+      s.style.height = maxH + 'px';
+    }
+    var posH = s.offsetHeight;
+    if (popup.querySelector('#loading-dots')) {
+      posH = Math.min(posH + 100, maxH);
+    }
+    setPopupPosition(posH);
   }
 
-  var lastAnchorRect = null;
-  var lastPopupPos = null;
-
-  function setPopupPosition() {
+  function setPopupPosition(posH) {
     if (!popup) return;
     var rect = getSelectionRect();
-    if (lastAnchorRect && lastPopupPos &&
-        lastAnchorRect.left === rect.left &&
-        lastAnchorRect.top === rect.top &&
-        lastAnchorRect.width === rect.width) {
-      popup.style.position = 'fixed';
-      popup.style.left = lastPopupPos.left + 'px';
-      popup.style.top = lastPopupPos.top + 'px';
-      return;
+    var gap = 6;
+    var w = popup.offsetWidth;
+    var h = posH || popup.offsetHeight;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var left = Math.min(Math.max(rect.left, 0), Math.max(0, vw - w - 5));
+    var top = rect.bottom + gap;
+    if (top + h > vh) {
+      var above = rect.top - h - gap;
+      top = above >= 0 ? above : Math.max(0, vh - h - 5);
     }
-    lastAnchorRect = { left: rect.left, top: rect.top, width: rect.width };
     popup.style.position = 'fixed';
-    popup.style.left = rect.left + 'px';
-    popup.style.top = rect.top + 'px';
-    var right = rect.left + popup.offsetWidth;
-    if (right > window.innerWidth) popup.style.left = (window.innerWidth - popup.offsetWidth - 5) + 'px';
-    if (parseInt(popup.style.top) < 0) popup.style.top = '0px';
-    var pr = popup.getBoundingClientRect();
-    if (pr.bottom > window.innerHeight) popup.style.top = (window.innerHeight - pr.height) + 'px';
-    lastPopupPos = { left: parseInt(popup.style.left), top: parseInt(popup.style.top) };
+    popup.style.left = Math.round(left) + 'px';
+    popup.style.top = Math.round(top) + 'px';
   }
 
   function addPopupEventListeners() {
