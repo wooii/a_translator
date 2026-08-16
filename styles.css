@@ -6,7 +6,9 @@
     z-index: 2147483647;
     padding: 10px;
     font-family: Arial, sans-serif;
-    cursor: pointer;
+    cursor: default;
+    user-select: text;
+    -webkit-user-select: text;
   }
   .popup-content {
     font-size: 14px;
@@ -17,6 +19,7 @@
     margin-top: 10px;
     text-decoration: none;
     color: #0078d4;
+    cursor: pointer;
   }
   .popup-content a:hover {
     text-decoration: underline;
@@ -27,7 +30,7 @@
   margin-right: 5px;
 }
 
-#pronounce-button {
+#pronounce-button, #pronounce-translation-button {
   background-color: #0078d4;
   color: white;
   border: none;
@@ -36,6 +39,24 @@
   border-radius: 5px;
 }
 
-#pronounce-button:hover {
+#pronounce-button:hover, #pronounce-translation-button:hover {
   background-color: #026ec1;
+}
+
+.online-notice {
+  font-size: 11px;
+  color: #8a6d00;
+  background: #fff8e1;
+  border: 1px solid #e0c060;
+  border-radius: 3px;
+  padding: 4px 6px;
+  margin: 8px 0 0 0;
+}
+
+.online-notice.clickable {
+  cursor: pointer;
+}
+
+.online-notice.clickable:hover {
+  text-decoration: underline;
 }

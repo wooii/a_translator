@@ -1,22 +1,87 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>A Translator</title>
   <style>
-    body { width: 300px; font-family: Arial, sans-serif; }
-    .container { padding: 10px; }
-    select { width: 100%; margin-bottom: 10px; }
+    body { width: 380px; font-family: Arial, sans-serif; font-size: 13px; }
+    .container { padding: 12px; }
+    h1 { font-size: 15px; margin: 0 0 2px 0; }
+    .tagline { margin: 0 0 10px 0; color: #555; }
+    select, input { width: 100%; margin-bottom: 8px; padding: 4px; box-sizing: border-box; }
+    label { display: block; margin-bottom: 2px; font-weight: bold; }
+    .privacy-online {
+      background: #fff8e1;
+      border: 1px solid #e0c060;
+      color: #8a6d00;
+      padding: 6px 8px;
+      margin: 6px 0;
+      border-radius: 4px;
+    }
+    .privacy-local {
+      background: #e8f5e9;
+      border: 1px solid #81c784;
+      color: #1b5e20;
+      padding: 6px 8px;
+      margin: 6px 0;
+      border-radius: 4px;
+    }
+    .provider-option {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .provider-option.selected {
+      border-color: #0078d4;
+      box-shadow: 0 0 0 1px #0078d4;
+    }
+    .provider-choice {
+      display: block;
+      margin-bottom: 2px;
+      cursor: pointer;
+    }
+    .provider-choice input {
+      width: auto;
+      margin: 0 4px 0 0;
+      padding: 0;
+      vertical-align: middle;
+    }
+    .provider-desc {
+      margin: 4px 0 0 0;
+    }
+    #status { color: #4a4; font-size: 12px; min-height: 16px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <p>Translate selected text using Google Translate.</p>
+    <h1>A Translator</h1>
+    <p class="tagline">Translate selected text on any webpage.</p>
+
+    <label>Translation Provider:</label>
+    <div class="provider-option" id="provider-browser">
+      <label class="provider-choice">
+        <input type="radio" name="provider" value="browser">
+        Browser AI (on-device, private, faster)
+      </label>
+      <div class="privacy-local provider-desc">✓ Your selected text never leaves the browser. Translations are produced on-device, instantly and offline. Requires Edge 148+ / Chrome 138+.</div>
+    </div>
+    <div class="provider-option" id="provider-google">
+      <label class="provider-choice">
+        <input type="radio" name="provider" value="google">
+        Google Translate (online)
+      </label>
+      <div class="privacy-online provider-desc">⚠ Your selected text leaves this device and is sent to Google's servers. Used automatically when Browser AI can't be used (older browser, unsupported language, model not downloaded).</div>
+    </div>
+
     <label for="targetLanguage">Target language:</label>
     <select id="targetLanguage">
       <option value="af">Afrikaans</option>
       <option value="ar">Arabic</option>
       <option value="hy">Armenian</option>
       <option value="be">Belarusian</option>
+      <option value="bn">Bengali</option>
       <option value="bg">Bulgarian</option>
       <option value="ca">Catalan</option>
       <option value="zh-CN">Chinese (Simplified)</option>
@@ -43,6 +108,7 @@
       <option value="ko">Korean</option>
       <option value="lv">Latvian</option>
       <option value="lt">Lithuanian</option>
+      <option value="ms">Malay</option>
       <option value="no">Norwegian</option>
       <option value="fa">Persian</option>
       <option value="pl">Polish</option>
@@ -54,10 +120,12 @@
       <option value="sl">Slovenian</option>
       <option value="es">Spanish</option>
       <option value="sw">Swahili</option>
+      <option value="ta">Tamil</option>
       <option value="sv">Swedish</option>
       <option value="th">Thai</option>
       <option value="tr">Turkish</option>
       <option value="uk">Ukrainian</option>
+      <option value="ur">Urdu</option>
       <option value="vi">Vietnamese</option>
     </select>
     <p id="status"></p>
