@@ -407,7 +407,7 @@
     if (!error && moreUrl) {
       var clickable = browserCapable();
       var needsDl = clickable && needsActivation;
-      var noticeText = '⚠ Translated by Google.';
+      var noticeText = '⚠ Translated online.';
       if (clickable && !needsDl) {
         noticeText += ' Click to switch to on-device AI.';
       }

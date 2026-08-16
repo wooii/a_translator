@@ -23,7 +23,7 @@ Configure the provider and target language (50 supported) in the extension optio
 A Translator does not collect, store, or sell any personal data. The extension has no analytics, no tracking, and no accounts.
 
 - **Data stored on your device**: your settings (translation provider and target language) are stored in the browser's own storage and may be synced by the browser.
-- **Data sent to Google**: when Google Translate is used (either because you selected Google as the provider, or because the built-in on-device Browser AI is unavailable), the text you selected is sent to `translate.googleapis.com` for translation. On-device translations are processed entirely in your browser and never leave your device. The popup always displays a notice ("⚠ Translated by Google.") whenever a translation was performed by Google.
+- **Data sent to Google**: when Google Translate is used (either because you selected Google as the provider, or because the built-in on-device Browser AI is unavailable), the text you selected is sent to `translate.googleapis.com` for translation. On-device translations are processed entirely in your browser and never leave your device. The popup always displays a notice ("⚠ Translated online.") whenever a translation was performed online.
 - **Text-to-speech** uses your browser's built-in speech synthesis and runs locally.
 - **No remote code**: all code is bundled in the extension package; network requests go only to `translate.googleapis.com` and only when translating via Google.
 
