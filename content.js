@@ -4,6 +4,9 @@
   var browserTranslators = {};
   var currentUtterance = null;
   var currentSpeechBtn = null;
+  var cachedTarget = null;
+  var cachedSource = null;
+  var cachedText = null;
   var BROWSER_LANG_MAP = { 'zh-CN': 'zh', 'zh-TW': 'zh-Hant', 'iw': 'he' };
 
   function extensionAlive() {
@@ -50,20 +53,37 @@
   function getBrowserTranslator(src, tgt) {
     var key = src + '|' + tgt;
     if (browserTranslators[key]) return Promise.resolve(browserTranslators[key]);
-    return Translator.create({ sourceLanguage: src, targetLanguage: tgt }).then(function(t) {
+    return Translator.create({
+      sourceLanguage: src,
+      targetLanguage: tgt
+    }).then(function(t) {
       browserTranslators[key] = t;
       return t;
     });
   }
 
-  function translateWithBrowser(text, targetLang) {
-    var tgt = BROWSER_LANG_MAP[targetLang] || targetLang;
-    return detectSourceLang(text).then(function(src) {
-      if (src === tgt) return text;
-      return getBrowserTranslator(src, tgt).then(function(t) {
-        return t.translate(text).then(function(out) {
-          return normalizePunct(out);
-        });
+  function modelStatus(src, tgt) {
+    if (typeof Translator === 'undefined') return Promise.resolve('unavailable');
+    try {
+      if (Translator.availability) {
+        return Promise.resolve(Translator.availability({ sourceLanguage: src, targetLanguage: tgt }))
+          .catch(function() { return 'unavailable'; });
+      }
+      if (Translator.capabilities) {
+        var caps = Translator.capabilities();
+        if (caps && caps.available) return Promise.resolve(caps.available(src, tgt));
+        if (caps && caps.languagePairAvailable) {
+          return Promise.resolve(caps.languagePairAvailable(src, tgt) ? 'available' : 'downloadable');
+        }
+      }
+    } catch (e) {}
+    return Promise.resolve('unavailable');
+  }
+
+  function attemptOnDevice(src, tgt, text) {
+    return getBrowserTranslator(src, tgt).then(function(t) {
+      return t.translate(text).then(function(out) {
+        return normalizePunct(out);
       });
     });
   }
@@ -77,6 +97,103 @@
   }
 
   var loadingTimer = null;
+  var modelDownloading = false;
+  var DL_FAIL_MSG = 'Download didn\'t finish — using Google. Try again or restart the browser.';
+
+  function downloadModel(src, tgt, ui, timeoutMs) {
+    if (modelDownloading) return;
+    if (typeof Translator === 'undefined') return;
+    modelDownloading = true;
+    var settled = false;
+    var timer = setTimeout(function() {
+      finish(false);
+    }, timeoutMs || 3000);
+    var pollTimer = setInterval(function() {
+      if (settled || typeof Translator === 'undefined' || !Translator.availability) return;
+      Promise.resolve(Translator.availability({ sourceLanguage: src, targetLanguage: tgt })).then(function(status) {
+        if (!settled && status === 'available') finish(true);
+      }).catch(function() {});
+    }, 3000);
+
+    function finish(ok) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearInterval(pollTimer);
+      modelDownloading = false;
+      if (ok) {
+        if (ui.onOk) ui.onOk();
+      } else {
+        if (ui.onFail) ui.onFail();
+      }
+    }
+
+    try {
+      Translator.create({
+        sourceLanguage: src,
+        targetLanguage: tgt
+      }).then(function(session) {
+        if (session && session.destroy) { try { session.destroy(); } catch (e) {} }
+        finish(true);
+      }, function() {
+        finish(false);
+      });
+    } catch (e) {
+      finish(false);
+    }
+  }
+
+  function startModelDownload(btn) {
+    if (modelDownloading || !btn) return;
+    var originalHTML = btn.innerHTML;
+    var src = btn.getAttribute('data-source');
+    var tgt = btn.getAttribute('data-target');
+    if (!src || !tgt) return;
+    var affordance = btn.querySelector('.dl-affordance');
+    if (affordance) affordance.textContent = 'Downloading on-device models…';
+    var sib = btn.nextSibling;
+    while (sib && sib.className === 'download-note') {
+      var nxt = sib.nextSibling;
+      sib.parentNode.removeChild(sib);
+      sib = nxt;
+    }
+    downloadModel(src, tgt, {
+      onOk: function() {
+        if (affordance) affordance.textContent = 'Downloaded ✓';
+        chrome.storage.sync.set({ provider: 'browser' }, function() {
+          if (popup && popup.isConnected && cachedText) {
+            translateSelection(cachedText);
+          }
+        });
+      },
+      onFail: function() {
+        btn.innerHTML = originalHTML;
+        var note = document.createElement('span');
+        note.className = 'download-note';
+        note.style.marginTop = '8px';
+        note.textContent = DL_FAIL_MSG;
+        btn.parentNode.insertBefore(note, btn.nextSibling);
+      }
+    });
+  }
+
+  function autoDownload(src, tgt, text) {
+    stopLoadingAnimation();
+    var tl = popup && popup.querySelector('#translation-text');
+    if (tl) tl.textContent = 'Downloading on-device models…';
+    downloadModel(src, tgt, {
+      onOk: function() {
+        if (popup && popup.isConnected && cachedText) {
+          translateSelection(cachedText);
+        }
+      },
+      onFail: function() {
+        if (popup && popup.isConnected) {
+          sendToBackground(text, true);
+        }
+      }
+    }, 600);
+  }
 
   function startLoadingAnimation() {
     stopLoadingAnimation();
@@ -184,23 +301,58 @@
     });
   }
 
+  function runAttempt(src, tgt, text) {
+    withTimeout(attemptOnDevice(src, tgt, text), ON_DEVICE_TIMEOUT).then(function(out) {
+      showPopup(text, out, null, null);
+    }).catch(function(e) {
+      sendToBackground(text, isActivationError(e));
+    });
+  }
+
   function translateSelection(text) {
     if (!extensionAlive()) return;
+    cachedSource = null;
+    cachedText = text;
     showLoadingPopup(text);
     chrome.storage.sync.get(['provider', 'targetLanguage'], function(settings) {
+      cachedTarget = settings.targetLanguage || cachedTarget || 'en';
       if (settings.provider === 'google' || !browserCapable()) {
-        sendToBackground(text);
+        sendToBackground(text, false);
         return;
       }
-      withTimeout(translateWithBrowser(text, settings.targetLanguage || 'en'), ON_DEVICE_TIMEOUT).then(function(out) {
-        showPopup(text, out, null, null);
+      var tgt = settings.targetLanguage || 'en';
+      var tgtBcp47 = BROWSER_LANG_MAP[tgt] || tgt;
+      detectSourceLang(text).then(function(src) {
+        cachedSource = src;
+        if (src === tgtBcp47) {
+          showPopup(text, text, null, null);
+          return;
+        }
+        modelStatus(src, tgtBcp47).then(function(status) {
+          var needsDownload = (status === 'downloadable' || status === 'downloading');
+          if (needsDownload) {
+            if (navigator.userActivation && navigator.userActivation.isActive) {
+              autoDownload(src, tgtBcp47, text);
+            } else {
+              sendToBackground(text, true);
+            }
+            return;
+          }
+          runAttempt(src, tgtBcp47, text);
+        });
       }).catch(function() {
-        sendToBackground(text);
+        sendToBackground(text, false);
       });
     });
   }
 
-  function sendToBackground(text) {
+  function isActivationError(e) {
+    if (!e) return false;
+    return e.name === 'NotAllowedError' ||
+           (e.message && /activation|user gesture|consent/i.test(e.message));
+  }
+
+  function sendToBackground(text, needsActivation) {
     if (!extensionAlive()) {
       showPopup(text, null, null, 'Extension is not responding — try reloading it.');
       return;
@@ -210,7 +362,7 @@
       if (done) return;
       done = true;
       if (response) {
-        showPopup(text, response.translation, response.moreUrl, response.error);
+        showPopup(text, response.translation, response.moreUrl, response.error, needsActivation);
       } else {
         showPopup(text, null, null, msg);
       }
@@ -239,7 +391,7 @@
     }
   });
 
-  function showPopup(text, translation, moreUrl, error) {
+  function showPopup(text, translation, moreUrl, error, needsActivation) {
     stopLoadingAnimation();
     if (popup) popup.remove();
     popup = document.createElement('div');
@@ -254,7 +406,18 @@
     }
     if (!error && moreUrl) {
       var clickable = browserCapable();
-      content += '<p class="online-notice' + (clickable ? ' clickable' : '') + '">⚠ Translated by Google.' + (clickable ? ' Click to switch to on-device AI.' : '') + '</p>';
+      var needsDl = clickable && needsActivation;
+      var noticeText = '⚠ Translated by Google.';
+      if (clickable && !needsDl) {
+        noticeText += ' Click to switch to on-device AI.';
+      }
+      var dlTgt = cachedTarget || 'en';
+      content += '<p class="online-notice' + (clickable ? ' clickable' : '') + '" data-source="' + esc(cachedSource || guessLang(text)) +
+                 '" data-target="' + esc(BROWSER_LANG_MAP[dlTgt] || dlTgt) + '">' + noticeText;
+      if (needsDl) {
+        content += ' <span class="dl-affordance">⬇ Download on-device model</span>';
+      }
+      content += '</p>';
       content += '<a href="' + moreUrl + '" target="_blank">More</a>';
     }
     content += '</div></div>';
@@ -263,14 +426,23 @@
     addPopupEventListeners();
     adjustPopupSize();
     if (!error && moreUrl && browserCapable()) {
+      function switchToOnDevice(e) {
+        e.stopPropagation();
+        chrome.storage.sync.set({ provider: 'browser' }, function() {
+          closePopup();
+          translateSelection(text);
+        });
+      }
       var notice = popup.querySelector('.online-notice');
       if (notice) {
         notice.addEventListener('mousedown', function(e) { e.preventDefault(); });
         notice.addEventListener('click', function(e) {
           e.stopPropagation();
-          chrome.storage.sync.set({ provider: 'browser' }, function() {
-            translateSelection(text);
-          });
+          if (needsActivation) {
+            startModelDownload(notice);
+          } else {
+            switchToOnDevice(e);
+          }
         });
       }
     }
