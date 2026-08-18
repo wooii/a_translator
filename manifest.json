@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "A Translator",
-  "version": "0.2",
+  "version": "0.3",
   "description": "Translate selected text on any webpage.",
   "permissions": ["contextMenus", "storage"],
   "host_permissions": [
