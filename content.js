@@ -21,10 +21,13 @@
     return typeof Translator !== 'undefined' && typeof Translator.create === 'function';
   }
 
+  var HAN_RE = new RegExp('\\p{Script=Han}', 'u');
+  var SINGLE_HAN_NOISE_RE = new RegExp('[\\s\\p{P}]', 'gu');
+
   function guessLang(text) {
-    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(text)) return 'zh';
     if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) return 'ja';
     if (/[\uac00-\ud7af]/.test(text)) return 'ko';
+    if (HAN_RE.test(text)) return 'zh';
     if (/[\u0400-\u04ff]/.test(text)) return 'ru';
     if (/[\u0e00-\u0e7f]/.test(text)) return 'th';
     if (/[\u0980-\u09ff]/.test(text)) return 'bn';
@@ -48,6 +51,41 @@
         resolve(guessLang(text));
       }
     });
+  }
+
+  var HANS_RE = new RegExp('[' + HANS_CHARS + ']', 'gu');
+  var HANT_RE = new RegExp('[' + HANT_CHARS + ']', 'gu');
+
+  function hanScript(text) {
+    if (!text) return null;
+    var hans = 0, hant = 0, m;
+    HANS_RE.lastIndex = 0;
+    while ((m = HANS_RE.exec(text)) !== null) hans++;
+    HANT_RE.lastIndex = 0;
+    while ((m = HANT_RE.exec(text)) !== null) hant++;
+    if (hans + hant === 0) return null;
+    return hant >= hans ? 'zh-Hant' : 'zh';
+  }
+
+  function langBase(code) {
+    return String(code || '').split('-')[0];
+  }
+
+  function isSingleHan(text) {
+    var t = String(text || '').replace(SINGLE_HAN_NOISE_RE, '');
+    return Array.from(t).length === 1 && HAN_RE.test(t);
+  }
+
+  function effectiveSource(src, tgt, text) {
+    var srcZh = langBase(src) === 'zh';
+    var single = isSingleHan(text);
+    var script = srcZh || single ? hanScript(text) : null;
+    if (script || srcZh || single) {
+      if (langBase(tgt) === 'zh') return script === tgt ? null : script;
+      return script || 'zh';
+    }
+    if (langBase(src) !== langBase(tgt)) return src;
+    return null;
   }
 
   function getBrowserTranslator(src, tgt) {
@@ -316,29 +354,32 @@
     showLoadingPopup(text);
     chrome.storage.sync.get(['provider', 'targetLanguage'], function(settings) {
       cachedTarget = settings.targetLanguage || cachedTarget || 'en';
-      if (settings.provider === 'google' || !browserCapable()) {
-        sendToBackground(text, false);
-        return;
-      }
       var tgt = settings.targetLanguage || 'en';
       var tgtBcp47 = BROWSER_LANG_MAP[tgt] || tgt;
+      var useGoogle = settings.provider === 'google' || !browserCapable();
       detectSourceLang(text).then(function(src) {
         cachedSource = src;
-        if (src === tgtBcp47) {
+        var effSrc = effectiveSource(src, tgtBcp47, text);
+        if (effSrc === null) {
           showPopup(text, text, null, null);
           return;
         }
-        modelStatus(src, tgtBcp47).then(function(status) {
+        if (effSrc !== src) cachedSource = effSrc;
+        if (useGoogle) {
+          sendToBackground(text, false);
+          return;
+        }
+        modelStatus(effSrc, tgtBcp47).then(function(status) {
           var needsDownload = (status === 'downloadable' || status === 'downloading');
           if (needsDownload) {
             if (navigator.userActivation && navigator.userActivation.isActive) {
-              autoDownload(src, tgtBcp47, text);
+              autoDownload(effSrc, tgtBcp47, text);
             } else {
               sendToBackground(text, true);
             }
             return;
           }
-          runAttempt(src, tgtBcp47, text);
+          runAttempt(effSrc, tgtBcp47, text);
         });
       }).catch(function() {
         sendToBackground(text, false);
